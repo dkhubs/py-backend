@@ -1,0 +1,14 @@
+{
+  "apps": [{
+    "name": "py-backend-8000",
+    "script": "python3 main.py --port=8000",
+    "cwd": "/opt/ops/py-backend/app/",
+    "max_memory_restart": "150M",
+    "log_date_format"  : "YYYY-MM-DD HH:mm Z",
+    "log_file"   : "/var/log/supervisor/py-backend.log",
+    "autorestart": true,
+    "node_args": [],
+    "args": [],
+    "env": {}
+  }
+]}

@@ -1,0 +1,44 @@
+Debug: True
+SecretKey: ''
+
+Server:
+  Name: 'Python Backend Service'
+  Version: '1.0.0'
+  ApiPrefix: '/api/v1'
+  Host: '127.0.0.1'
+  Port: 8666
+
+WebSocket:
+  Host: '127.0.0.1'
+  Port: 8777
+  MaxConn: 1000
+  Timeout: 300
+
+Mysql:
+  Host: '127.0.0.1'
+  Port: 3306
+  Username: 'admin'
+  Password: 'G5f*Hn;pTbA'
+  DBName: 'qaz'
+
+Redis:
+  Host: '127.0.0.1'
+  Port: 6379
+  Password: 'qwdavsblm'
+  DB: 10
+
+HeartBeat:
+  Abnormal: 300
+
+Celery:
+  Broker: ''
+  ResultBackend: ''
+  ResultExpires: 120
+  Timezone: 'Asia/Shanghai'
+  EnableUTC: False
+
+  TaskAcksLate: True
+  WorkerPrefetchMultiplier: 1
+
+  TaskDefaultExchange: 'default'
+  TaskDefaultRoutingKey: 'default'

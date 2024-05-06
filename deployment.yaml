@@ -1,0 +1,269 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: py-backend
+  namespace: sre
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+  - host: py.sre.dk.com
+    http:
+      paths:
+      - pathType: Prefix
+        path: /
+        backend:
+          service:
+            name: py-backend
+            port:
+              number: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: py-backend
+  namespace: sre
+spec:
+  ports:
+    - name: http-monitor
+      port: 80
+      targetPort: 80
+  selector:
+    app: py-backend
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: py-backend-env
+  namespace: sre
+data:
+  .env: |-
+    Debug: True
+    SecretKey: ''
+
+    Server:
+      Name: 'Python Backend Service'
+      Version: '1.0.0'
+      ApiPrefix: '/api/v1'
+      Host: '127.0.0.1'
+      Port: 8666
+
+    WebSocket:
+      Host: '127.0.0.1'
+      Port: 8777
+      MaxConn: 1000
+      Timeout: 300
+
+    Mysql:
+      Host: '127.0.0.1'
+      Port: 3306
+      Username: 'admin'
+      Password: 'G5f*Hn;pTbA'
+      DBName: 'qaz'
+
+    Redis:
+      Host: '127.0.0.1'
+      Port: 6379
+      Password: 'qwdavsblm'
+      DB: 10
+
+    HeartBeat:
+      Abnormal: 300
+
+    Celery:
+      Broker: ''
+      ResultBackend: ''
+      ResultExpires: 120
+      Timezone: 'Asia/Shanghai'
+      EnableUTC: False
+
+      TaskAcksLate: True
+      WorkerPrefetchMultiplier: 1
+
+      TaskDefaultExchange: 'default'
+      TaskDefaultRoutingKey: 'default'
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: py-backend
+  namespace: sre
+spec:
+  minReadySeconds: 5
+  progressDeadlineSeconds: 600
+  replicas: 2
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: py-backend
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: py-backend
+    spec:
+      containers:
+        - env:
+            - name: ENV_FILEPATH
+              value: config.yaml
+          image: 'harbor.dk.com/sre/py_backend:1.0.0'
+          imagePullPolicy: Always
+          command: ["uvicorn"]
+          args: ["main:app", "--host", "0.0.0.0", "--port", "80"]
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /api/v1/health
+              port: 80
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 10
+          name: py-backend
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          resources:
+            limits:
+              cpu: '4'
+              memory: 4Gi
+            requests:
+              cpu: 250m
+              memory: 512Mi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /env
+              name: py-backend-env
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - configMap:
+            defaultMode: 420
+            items:
+              - key: .env
+                path: .env
+            name: py-backend-env
+          name: py-backend-env
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: py-backend-celery
+  namespace: sre
+spec:
+  minReadySeconds: 5
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: py-backend-celery
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: py-backend-celery
+    spec:
+      containers:
+        - env:
+            - name: ENV_FILEPATH
+              value: config.yaml
+          image: 'harbor.dk.com/sre/py_backend:1.0.0'
+          imagePullPolicy: Always
+          command: ["celery"]
+          args: ["-A", "workers.tasks", "worker", "--loglevel", "info"]
+          name: py-backend-worker
+          resources:
+            limits:
+              cpu: '4'
+              memory: 4Gi
+            requests:
+              cpu: 250m
+              memory: 512Mi
+          volumeMounts:
+            - mountPath: /env
+              name: py-backend-env
+        - env:
+            - name: ENV_FILEPATH
+              value: config.yaml
+          image: 'harbor.dk.com/sre/py_backend:1.0.0'
+          imagePullPolicy: Always
+          command: ["celery"]
+          args: ["-A", "workers.tasks", "beat", "--loglevel", "info"]
+          name: py-backend-beat
+          resources:
+            limits:
+              cpu: '1'
+              memory: 1Gi
+            requests:
+              cpu: 250m
+              memory: 512Mi
+          volumeMounts:
+            - mountPath: /env
+              name: py-backend-env
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - configMap:
+            defaultMode: 420
+            items:
+              - key: .env
+                path: .env
+            name: py-backend-env
+          name: py-backend-env
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: py-backend
+  namespace: sre
+spec:
+  clusterIP: 172.25.89.100
+  clusterIPs:
+    - 172.25.89.100
+  ports:
+    - name: http-monitor
+      port: 80
+      protocol: TCP
+      targetPort: 80
+  selector:
+    app: py-backend
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+  name: py-backend
+  namespace: sre
+spec:
+  rules:
+    - host: py.sre.dk.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: py-backend
+                port:
+                  number: 80
+            path: /
+            pathType: Prefix
